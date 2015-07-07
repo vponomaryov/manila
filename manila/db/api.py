@@ -316,6 +316,15 @@ def share_get_all_by_host(context, host, filters=None, sort_key=None,
     )
 
 
+def share_get_all_by_host_with_access_rules(context, host, filters=None,
+                                            sort_key=None, sort_dir=None):
+    """Get all shares that have access rules and located on specific host."""
+    return IMPL.share_get_all_by_host_with_access_rules(
+        context, host=host, filters=filters,
+        sort_key=sort_key, sort_dir=sort_dir,
+    )
+
+
 def share_get_all_by_project(context, project_id, filters=None,
                              is_public=False, sort_key=None, sort_dir=None):
     """Returns all shares with given project ID."""

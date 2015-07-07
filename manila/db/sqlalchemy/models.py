@@ -310,6 +310,11 @@ class ShareAccessMapping(BASE, ManilaBase):
                    default=STATE_NEW)
     access_level = Column(Enum(*constants.ACCESS_LEVELS),
                           default=constants.ACCESS_LEVEL_RW)
+    share = orm.relationship(Share, backref="share_access",
+                             foreign_keys=share_id,
+                             primaryjoin='and_('
+                             'ShareAccessMapping.share_id == Share.id,'
+                             'ShareAccessMapping.deleted == "False")')
 
 
 class ShareSnapshot(BASE, ManilaBase):

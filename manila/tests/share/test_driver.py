@@ -219,3 +219,11 @@ class ShareDriverTestCase(test.TestCase):
         else:
             self.assertRaises(exception.InvalidParameterValue,
                               share_driver.check_for_setup_error)
+
+    def test_get_periodic_hook_data(self):
+        share_driver = self._instantiate_share_driver(None, False)
+        shares = ["list", "of", "shares"]
+
+        result = share_driver.get_periodic_hook_data("fake_context", shares)
+
+        self.assertEqual(shares, result)

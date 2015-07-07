@@ -1151,7 +1151,8 @@ def share_get(context, share_id, session=None):
 @require_context
 def _share_get_all_with_filters(context, project_id=None, share_server_id=None,
                                 share_network_id=None, host=None, filters=None,
-                                is_public=False, sort_key=None, sort_dir=None):
+                                is_public=False, sort_key=None, sort_dir=None,
+                                with_access_rules=False):
     """Returns sorted list of shares that satisfies filters.
 
     :param context: context to query under
@@ -1164,6 +1165,7 @@ def _share_get_all_with_filters(context, project_id=None, share_server_id=None,
                       to result if True
     :param sort_key: key of models.Share to be used for sorting
     :param sort_dir: desired direction of sorting, can be 'asc' and 'desc'
+    :param with_access_rules: return shares that have access rules
     :returns: list -- models.Share
     :raises: exception.InvalidInput
     """
@@ -1206,6 +1208,11 @@ def _share_get_all_with_filters(context, project_id=None, share_server_id=None,
         for k, v in filters['extra_specs'].items():
             query = query.filter(or_(models.ShareTypeExtraSpecs.key == k,
                                      models.ShareTypeExtraSpecs.value == v))
+    if with_access_rules:
+        query = query.join(
+            models.ShareAccessMapping,
+            models.ShareAccessMapping.share_id == models.Share.id
+        )
 
     # Apply sorting
     try:
@@ -1232,6 +1239,17 @@ def _share_get_all_with_filters(context, project_id=None, share_server_id=None,
 def share_get_all(context, filters=None, sort_key=None, sort_dir=None):
     query = _share_get_all_with_filters(
         context, filters=filters, sort_key=sort_key, sort_dir=sort_dir)
+    return query
+
+
+@require_admin_context
+def share_get_all_by_host_with_access_rules(context, host, filters=None,
+                                            sort_key=None, sort_dir=None):
+    """Get all shares that have access rules and located on specific host."""
+    query = _share_get_all_with_filters(
+        context, host=host, filters=filters,
+        sort_key=sort_key, sort_dir=sort_dir,
+        with_access_rules=True)
     return query
 
 
