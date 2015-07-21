@@ -60,7 +60,7 @@ hook_options = [
         help="Whether to suppress post hook errors (allow driver's results "
              "pass through) or not.",
         deprecated_group='DEFAULT'),
-    cfg.FloatOpt(
+    cfg.IntOpt(
         "periodic_hooks_interval",
         default=300.0,
         help="Interval between execution of periodic hooks. "

@@ -777,7 +777,8 @@ class ShareManager(manager.SchedulerDependentManager):
 
         self.update_service_capabilities(share_stats)
 
-    @periodic_task.periodic_task(spacing=CONF.periodic_hooks_interval)
+#    @periodic_task.periodic_task(spacing=CONF.periodic_hooks_interval)
+    @periodic_task.periodic_task(spacing=1)
     def _execute_periodic_hook(self, context):
         """Executes periodic-based hooks."""
         shares = self.db.share_get_all_by_host_with_access_rules(
@@ -787,6 +788,37 @@ class ShareManager(manager.SchedulerDependentManager):
         for hook in self.hooks:
             hook.execute_periodic_hook(
                 context=context, periodic_hook_data=periodic_hook_data)
+
+        import time
+        time.sleep(2)
+        self._zaqar_notification_consumer(context)
+
+    def _zaqar_notification_consumer(self, context):
+        from manila.share.hooks.zaqar_notification import ZAQARCLIENTS
+
+        LOG.critical("\n\n Get messages from own queue: \n\n")
+        self._pop_zaqar_messages(ZAQARCLIENTS[0], ZAQARCLIENTS[0].queue_name)
+
+        LOG.critical("\nNow trying to get queue of another user\n")
+        self._pop_zaqar_messages(ZAQARCLIENTS[0], ZAQARCLIENTS[1].queue_name)
+
+    def _pop_zaqar_messages(self, client, queue_name):
+        try:
+            user = client.conf['auth_opts']['options']['os_username']
+            project = client.conf['auth_opts']['options']['os_project_name']
+            queue = client.queue(queue_name)
+            messages = [str(m.body) for m in queue.pop()]
+            LOG.critical(
+                "\n\n Received folowong messages: \n%(m)s \n from '%(q)s' "
+                "queue using '%(u)s' user and '%(p)s' project.\n" % {
+                    'm': '\n'.join(messages),
+                    'q': queue_name,
+                    'u': user,
+                    'p': project,
+                }
+            )
+        except Exception as e:
+            LOG.exception("Caught exception - %s" % e)
 
     def _get_servers_pool_mapping(self, context):
         """Get info about relationships between pools and share_servers."""
