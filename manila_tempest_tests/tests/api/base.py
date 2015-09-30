@@ -468,7 +468,7 @@ class BaseSharesTest(test.BaseTestCase):
                                         description=None, force=False,
                                         client=None, cleanup_in_class=True):
         if client is None:
-            client = cls.shares_client
+            client = cls.shares_v2_client
         if description is None:
             description = "Tempest's snapshot"
         snapshot = client.create_snapshot(share_id, name, description, force)
@@ -520,6 +520,16 @@ class BaseSharesTest(test.BaseTestCase):
                  service['binary'] == "manila-share" and
                  service['state'] == 'up']
         return zones
+
+    def get_pools_for_replication_domain(self):
+        # Get the list of pools for the replication domain
+        pools = self.admin_client.list_pools(detail=True)['pools']
+        instance_host = self.shares[0]['host']
+        host_pool = [p for p in pools if p['name'] == instance_host][0]
+        rep_domain = host_pool['capabilities']['replication_domain']
+        pools_in_rep_domain = [p for p in pools if p['capabilities'][
+            'replication_domain'] == rep_domain]
+        return rep_domain, pools_in_rep_domain
 
     @classmethod
     def create_share_replica(cls, share_id, availability_zone, client=None,
