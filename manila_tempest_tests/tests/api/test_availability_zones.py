@@ -13,9 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest import config
 from tempest import test
+import testtools
 
 from manila_tempest_tests.tests.api import base
+
+CONF = config.CONF
 
 
 class AvailabilityZonesTest(base.BaseSharesTest):
@@ -29,8 +33,25 @@ class AvailabilityZonesTest(base.BaseSharesTest):
                 self.assertIn(key, az)
 
     @test.attr(type=["smoke", "gate"])
-    def test_list_availability_zones_extension_url(self):
+    def test_list_availability_zones_legacy_url_api_v1(self):
         # NOTE(vponomaryov): remove this test with removal of availability zone
         # extension url support.
         azs = self.shares_client.list_availability_zones()
+        self._list_availability_zones_assertions(azs)
+
+    @test.attr(type=["smoke", "gate"])
+    @testtools.skipUnless(float(CONF.share.max_api_microversion) > 2.5,
+                          "Microversion v2.6 is required.")
+    def test_list_availability_zones_legacy_url_api_v2(self):
+        # NOTE(vponomaryov): remove this test with removal of availability zone
+        # extension url support.
+        azs = self.shares_v2_client.list_availability_zones(
+            url='os-availability-zone', version='2.6')
+        self._list_availability_zones_assertions(azs)
+
+    @test.attr(type=["smoke", "gate"])
+    @testtools.skipUnless(float(CONF.share.max_api_microversion) > 2.6,
+                          "Microversion v2.7 is required.")
+    def test_list_availability_zones(self):
+        azs = self.shares_v2_client.list_availability_zones(version='2.7')
         self._list_availability_zones_assertions(azs)

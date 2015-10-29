@@ -38,7 +38,7 @@ class ShareTypesController(wsgi.Controller):
 
     def __getattr__(self, key):
         if key == 'os-share-type-access':
-            return self._list_project_access
+            return self.share_type_access
         return super(self.__class__, self).__getattr__(key)
 
     def _notify_share_type_error(self, context, method, payload):
@@ -211,7 +211,7 @@ class ShareTypesController(wsgi.Controller):
 
         return webob.Response(status_int=202)
 
-    def _list_project_access(self, req, id):
+    def share_type_access(self, req, id):
         context = req.environ['manila.context']
         self.authorize(context, 'list_project_access')
 

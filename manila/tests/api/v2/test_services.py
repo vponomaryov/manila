@@ -17,9 +17,10 @@
 
 import datetime
 
+import ddt
 from oslo_utils import timeutils
 
-from manila.api.v1 import services
+from manila.api.v2 import services
 from manila import context
 from manila import db
 from manila import exception
@@ -105,41 +106,6 @@ fake_response_service_list = {'services': [
 ]}
 
 
-class FakeRequest(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {}
-
-
-class FakeRequestWithBinary(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"binary": "manila-share"}
-
-
-class FakeRequestWithHost(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"host": "host1"}
-
-
-class FakeRequestWithZone(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"zone": "manila1"}
-
-
-class FakeRequestWithStatus(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"status": "enabled"}
-
-
-class FakeRequestWithState(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"state": "up"}
-
-
-class FakeRequestWithHostBinary(object):
-    environ = {"manila.context": context.get_admin_context()}
-    GET = {"host": "host1", "binary": "manila-share"}
-
-
 def fake_service_get_all(context):
     return fake_services_list
 
@@ -175,10 +141,11 @@ def fake_utcnow():
     return datetime.datetime(2012, 10, 29, 13, 42, 11)
 
 
+@ddt.ddt
 class ServicesTest(test.TestCase):
 
     def setUp(self):
-        super(ServicesTest, self).setUp()
+        super(self.__class__, self).setUp()
 
         self.mock_object(db, "service_get_all", fake_service_get_all)
         self.mock_object(timeutils, "utcnow", fake_utcnow)
@@ -189,17 +156,26 @@ class ServicesTest(test.TestCase):
 
         self.context = context.get_admin_context()
         self.controller = services.ServiceController()
+        self.controller_legacy = services.ServiceControllerLegacy()
 
-    def tearDown(self):
-        super(ServicesTest, self).tearDown()
+    @ddt.data(
+        ('os-services', '1.0', services.ServiceControllerLegacy),
+        ('os-services', '2.6', services.ServiceControllerLegacy),
+        ('services', '2.7', services.ServiceController),
+    )
+    @ddt.unpack
+    def test_services_list(self, url, version, controller):
+        req = fakes.HTTPRequest.blank('/%s' % url, version=version)
+        req.environ['manila.context'] = self.context
 
-    def test_services_list(self):
-        req = FakeRequest()
-        res_dict = self.controller.index(req)
+        res_dict = controller().index(req)
+
         self.assertEqual(fake_response_service_list, res_dict)
 
     def test_services_list_with_host(self):
-        req = FakeRequestWithHost()
+        req = fakes.HTTPRequest.blank('/services?host=host1', version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
 
         response = {'services': [
@@ -209,8 +185,12 @@ class ServicesTest(test.TestCase):
         self.assertEqual(response, res_dict)
 
     def test_services_list_with_binary(self):
-        req = FakeRequestWithBinary()
+        req = fakes.HTTPRequest.blank(
+            '/services?binary=manila-share', version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
+
         response = {'services': [
             fake_response_service_list['services'][1],
             fake_response_service_list['services'][3],
@@ -219,8 +199,11 @@ class ServicesTest(test.TestCase):
         self.assertEqual(response, res_dict)
 
     def test_services_list_with_zone(self):
-        req = FakeRequestWithZone()
+        req = fakes.HTTPRequest.blank('/services?zone=manila1', version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
+
         response = {'services': [
             fake_response_service_list['services'][0],
             fake_response_service_list['services'][1],
@@ -228,16 +211,23 @@ class ServicesTest(test.TestCase):
         self.assertEqual(response, res_dict)
 
     def test_services_list_with_status(self):
-        req = FakeRequestWithStatus()
+        req = fakes.HTTPRequest.blank(
+            '/services?status=enabled', version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
+
         response = {'services': [
             fake_response_service_list['services'][2],
         ]}
         self.assertEqual(response, res_dict)
 
     def test_services_list_with_state(self):
-        req = FakeRequestWithState()
+        req = fakes.HTTPRequest.blank('/services?state=up', version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
+
         response = {'services': [
             fake_response_service_list['services'][0],
             fake_response_service_list['services'][1],
@@ -245,19 +235,71 @@ class ServicesTest(test.TestCase):
         self.assertEqual(response, res_dict)
 
     def test_services_list_with_host_binary(self):
-        req = FakeRequestWithHostBinary()
+        req = fakes.HTTPRequest.blank(
+            "/services?binary=manila-share&state=up", version='2.7')
+        req.environ['manila.context'] = self.context
+
         res_dict = self.controller.index(req)
+
         response = {'services': [fake_response_service_list['services'][1], ]}
         self.assertEqual(response, res_dict)
 
-    def test_services_enable(self):
+    @ddt.data(
+        ('os-services', '1.0', services.ServiceControllerLegacy),
+        ('os-services', '2.6', services.ServiceControllerLegacy),
+        ('services', '2.7', services.ServiceController),
+    )
+    @ddt.unpack
+    def test_services_enable(self, url, version, controller):
         body = {'host': 'host1', 'binary': 'manila-share'}
-        req = fakes.HTTPRequest.blank('/v1/fake/os-services/enable')
-        res_dict = self.controller.update(req, "enable", body)
+        req = fakes.HTTPRequest.blank('/fooproject/%s' % url, version=version)
+
+        res_dict = controller().update(req, "enable", body)
+
         self.assertEqual(False, res_dict['disabled'])
 
-    def test_services_disable(self):
-        req = fakes.HTTPRequest.blank('/v1/fake/os-services/disable')
+    @ddt.data(
+        ('os-services', '1.0', services.ServiceControllerLegacy),
+        ('os-services', '2.6', services.ServiceControllerLegacy),
+        ('services', '2.7', services.ServiceController),
+    )
+    @ddt.unpack
+    def test_services_disable(self, url, version, controller):
+        req = fakes.HTTPRequest.blank(
+            '/fooproject/%s/disable' % url, version=version)
         body = {'host': 'host1', 'binary': 'manila-share'}
-        res_dict = self.controller.update(req, "disable", body)
+
+        res_dict = controller().update(req, "disable", body)
+
         self.assertTrue(res_dict['disabled'])
+
+    @ddt.data(
+        ('os-services', '2.7', services.ServiceControllerLegacy),
+        ('services', '2.6', services.ServiceController),
+        ('services', '1.0', services.ServiceController),
+    )
+    @ddt.unpack
+    def test_services_update_legacy_url_2_dot_7_api_not_found(self, url,
+                                                              version,
+                                                              controller):
+        req = fakes.HTTPRequest.blank(
+            '/fooproject/%s/fake' % url, version=version)
+        body = {'host': 'host1', 'binary': 'manila-share'}
+
+        self.assertRaises(
+            exception.VersionNotFoundForAPIMethod,
+            controller().update,
+            req, "disable", body,
+        )
+
+    @ddt.data(
+        ('os-services', '2.7', services.ServiceControllerLegacy),
+        ('services', '2.6', services.ServiceController),
+        ('services', '1.0', services.ServiceController),
+    )
+    @ddt.unpack
+    def test_services_list_api_not_found(self, url, version, controller):
+        req = fakes.HTTPRequest.blank('/fooproject/%s' % url, version=version)
+
+        self.assertRaises(
+            exception.VersionNotFoundForAPIMethod, controller().index, req)

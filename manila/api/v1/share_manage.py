@@ -25,19 +25,9 @@ from manila.share import utils as share_utils
 from manila import utils
 
 
-class ShareManageController(wsgi.Controller):
-    """Allows existing share to be 'managed' by Manila."""
+class ShareManageMixin(object):
 
-    resource_name = "share"
-    _view_builder_class = share_views.ViewBuilder
-
-    def __init__(self, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.share_api = share.API()
-
-    def create(self, req, body):
-        # TODO(vponomaryov): move it to shares controller.
-
+    def _manage(self, req, body):
         context = req.environ['manila.context']
         self.authorize(req.environ['manila.context'], 'manage')
         share_data = self._validate_manage_parameters(context, body)
@@ -114,6 +104,26 @@ class ShareManageController(wsgi.Controller):
             return stype['id']
         except exception.ShareTypeNotFound as e:
             raise exc.HTTPNotFound(explanation=six.text_type(e))
+
+
+class ShareManageController(ShareManageMixin, wsgi.Controller):
+    """Allows existing share to be 'managed' by Manila."""
+
+    resource_name = "share"
+    _view_builder_class = share_views.ViewBuilder
+
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.share_api = share.API()
+
+    @wsgi.Controller.api_version('1.0', '2.6')
+    def create(self, req, body):
+        """Legacy method for 'manage share' operation.
+
+        Should be removed when minimum API version becomes equal to or
+        greater than v2.7
+        """
+        return self._manage(req, body)
 
 
 def create_resource():

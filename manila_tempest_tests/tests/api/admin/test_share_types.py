@@ -128,16 +128,16 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
         st_id = st_create["share_type"]["id"]
 
         # It should not be listed without access
-        st_list = self.shares_client.list_share_types()
+        st_list = self.shares_v2_client.list_share_types()
         sts = st_list["share_types"]
         self.assertFalse(any(st_id in st["id"] for st in sts))
 
         # List projects that have access for share type - none expected
-        access = self.shares_client.list_access_to_share_type(st_id)
+        access = self.shares_v2_client.list_access_to_share_type(st_id)
         self.assertEqual([], access)
 
         # Add project access to share type
-        access = self.shares_client.add_access_to_share_type(
+        access = self.shares_v2_client.add_access_to_share_type(
             st_id, project_id)
 
         # Now it should be listed
@@ -146,12 +146,12 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
         self.assertTrue(any(st_id in st["id"] for st in sts))
 
         # List projects that have access for share type - one expected
-        access = self.shares_client.list_access_to_share_type(st_id)
+        access = self.shares_v2_client.list_access_to_share_type(st_id)
         expected = [{'share_type_id': st_id, 'project_id': project_id}, ]
         self.assertEqual(expected, access)
 
         # Remove project access from share type
-        access = self.shares_client.remove_access_from_share_type(
+        access = self.shares_v2_client.remove_access_from_share_type(
             st_id, project_id)
 
         # It should not be listed without access
@@ -160,5 +160,5 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
         self.assertFalse(any(st_id in st["id"] for st in sts))
 
         # List projects that have access for share type - none expected
-        access = self.shares_client.list_access_to_share_type(st_id)
+        access = self.shares_v2_client.list_access_to_share_type(st_id)
         self.assertEqual([], access)

@@ -449,7 +449,7 @@ class ShareTypeAccessTest(test.TestCase):
                                       use_admin_context=True)
 
         self.assertRaises(webob.exc.HTTPNotFound,
-                          self.controller._list_project_access,
+                          self.controller.share_type_access,
                           req, '1')
 
     def test_list_type_access_private(self):
@@ -458,7 +458,7 @@ class ShareTypeAccessTest(test.TestCase):
             {'share_type_id': '2', 'project_id': PROJ3_UUID},
         ]}
 
-        result = self.controller._list_project_access(self.req, '2')
+        result = self.controller.share_type_access(self.req, '2')
 
         self.assertEqual(expected, result)
 
@@ -469,7 +469,7 @@ class ShareTypeAccessTest(test.TestCase):
             raise exception.PolicyNotAuthorized(action='index')
 
         self.assertRaises(webob.exc.HTTPForbidden,
-                          self.controller._list_project_access,
+                          self.controller.share_type_access,
                           req, 'fake')
 
     def test_list_type_with_admin_default_proj1(self):

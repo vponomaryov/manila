@@ -41,6 +41,30 @@ class ShareInstancesController(wsgi.Controller, wsgi.AdminActionsMixin):
     def _delete(self, *args, **kwargs):
         return self.share_api.delete_instance(*args, **kwargs)
 
+    @wsgi.Controller.api_version('1.0', '2.6')
+    @wsgi.action('os-reset_status')
+    @wsgi.response(202)
+    def instance_reset_status(self, req, id, body):
+        return self._reset_status(req, id, body)
+
+    @wsgi.Controller.api_version('2.7')  # noqa
+    @wsgi.action('reset_status')
+    @wsgi.response(202)
+    def instance_reset_status(self, req, id, body):  # pylint: disable=E0102
+        return self._reset_status(req, id, body)
+
+    @wsgi.Controller.api_version('1.0', '2.6')
+    @wsgi.action('os-force_delete')
+    @wsgi.response(202)
+    def instance_force_delete(self, req, id, body):
+        return self._force_delete(req, id, body)
+
+    @wsgi.Controller.api_version('2.7')  # noqa
+    @wsgi.action('force_delete')
+    @wsgi.response(202)
+    def instance_force_delete(self, req, id, body):  # pylint: disable=E0102
+        return self._force_delete(req, id, body)
+
     @wsgi.Controller.api_version("2.3")
     def index(self, req):
         context = req.environ['manila.context']

@@ -38,15 +38,8 @@ from manila.share import share_types
 LOG = log.getLogger(__name__)
 
 
-class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
-    """The Shares API controller for the OpenStack API."""
-
-    resource_name = 'share'
-    _view_builder_class = share_views.ViewBuilder
-
-    def __init__(self):
-        super(ShareController, self).__init__()
-        self.share_api = share.API()
+class ShareMixin(object):
+    """Mixin class for Shares API Controllers."""
 
     def _update(self, *args, **kwargs):
         db.share_update(*args, **kwargs)
@@ -59,16 +52,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
 
     def _migrate(self, *args, **kwargs):
         return self.share_api.migrate_share(*args, **kwargs)
-
-    @wsgi.action('os-reset_status')
-    @wsgi.response(202)
-    def share_reset_status(self, req, id, body):
-        super(self.__class__, self)._reset_status(req, id, body)
-
-    @wsgi.action('os-force_delete')
-    @wsgi.response(202)
-    def share_force_delete(self, req, id, body):
-        super(self.__class__, self)._force_delete(req, id, body)
 
     def show(self, req, id):
         """Return data about the given share."""
@@ -113,9 +96,7 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
 
         return webob.Response(status_int=202)
 
-    @wsgi.Controller.api_version("2.5", None, True)
-    @wsgi.action("os-migrate_share")
-    def migrate_share(self, req, id, body):
+    def _migrate_share(self, req, id, body):
         """Migrate a share to the specified host."""
         context = req.environ['manila.context']
         try:
@@ -123,7 +104,7 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
         except exception.NotFound:
             msg = _("Share %s not found.") % id
             raise exc.HTTPNotFound(explanation=msg)
-        params = body['os-migrate_share']
+        params = body.get('os-migrate_share', body.get('migrate_share'))
         try:
             host = params['host']
         except KeyError:
@@ -229,12 +210,7 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
         share.update(update_dict)
         return self._view_builder.detail(req, share)
 
-    @wsgi.Controller.api_version("2.4")
     def create(self, req, body):
-        return self._create(req, body)
-
-    @wsgi.Controller.api_version("1.0", "2.3")  # noqa
-    def create(self, req, body):  # pylint: disable=E0102
         # Remove consistency group attributes
         body.get('share', {}).pop('consistency_group_id', None)
         share = self._create(req, body)
@@ -400,7 +376,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
             except ValueError:
                 raise webob.exc.HTTPBadRequest(explanation=exc_str)
 
-    @wsgi.action('os-allow_access')
     def _allow_access(self, req, id, body):
         """Add share access rule."""
         context = req.environ['manila.context']
@@ -427,7 +402,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
             raise webob.exc.HTTPBadRequest(explanation=e.msg)
         return {'access': access}
 
-    @wsgi.action('os-deny_access')
     def _deny_access(self, req, id, body):
         """Remove share access rule."""
         context = req.environ['manila.context']
@@ -444,7 +418,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
         self.share_api.deny_access(context, share, access)
         return webob.Response(status_int=202)
 
-    @wsgi.action('os-access_list')
     def _access_list(self, req, id, body):
         """list share access rules."""
         context = req.environ['manila.context']
@@ -453,7 +426,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
         access_list = self.share_api.access_get_all(context, share)
         return {'access_list': access_list}
 
-    @wsgi.action('os-extend')
     def _extend(self, req, id, body):
         """Extend size of a share."""
         context = req.environ['manila.context']
@@ -469,7 +441,6 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
 
         return webob.Response(status_int=202)
 
-    @wsgi.action('os-shrink')
     def _shrink(self, req, id, body):
         """Shrink size of a share."""
         context = req.environ['manila.context']
@@ -496,6 +467,50 @@ class ShareController(wsgi.Controller, wsgi.AdminActionsMixin):
             raise webob.exc.HTTPBadRequest(explanation=msg)
 
         return share, size
+
+
+class ShareController(wsgi.Controller, ShareMixin, wsgi.AdminActionsMixin):
+    """The Shares API v1 controller for the OpenStack API."""
+    resource_name = 'share'
+    _view_builder_class = share_views.ViewBuilder
+
+    def __init__(self):
+        super(self.__class__, self).__init__()
+        self.share_api = share.API()
+
+    @wsgi.action('os-reset_status')
+    @wsgi.response(202)
+    def share_reset_status(self, req, id, body):
+        return self._reset_status(req, id, body)
+
+    @wsgi.action('os-force_delete')
+    @wsgi.response(202)
+    def share_force_delete(self, req, id, body):
+        return self._force_delete(req, id, body)
+
+    @wsgi.action('os-allow_access')
+    def allow_access(self, req, id, body):
+        """Add share access rule."""
+        return self._allow_access(req, id, body)
+
+    @wsgi.action('os-deny_access')
+    def deny_access(self, req, id, body):
+        return self._deny_access(req, id, body)
+
+    @wsgi.action('os-access_list')
+    def access_list(self, req, id, body):
+        """list share access rules."""
+        return self._access_list(req, id, body)
+
+    @wsgi.action('os-extend')
+    def extend(self, req, id, body):
+        """Extend size of a share."""
+        return self._extend(req, id, body)
+
+    @wsgi.action('os-shrink')
+    def shrink(self, req, id, body):
+        """Shrink size of a share."""
+        return self._shrink(req, id, body)
 
 
 def create_resource():

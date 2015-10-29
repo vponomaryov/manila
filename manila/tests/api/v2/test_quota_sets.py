@@ -26,10 +26,11 @@ from oslo_config import cfg
 import webob.exc
 import webob.response
 
-from manila.api.v1 import quota_sets
+from manila.api.v2 import quota_sets
 from manila import context
 from manila import exception
 from manila import test
+from manila.tests.api import fakes
 from manila import utils
 
 CONF = cfg.CONF
@@ -82,6 +83,35 @@ class QuotaSetsControllerTest(test.TestCase):
         }
 
         result = self.controller.defaults(REQ, self.project_id)
+
+        self.assertEqual(expected, result)
+
+    @ddt.data(
+        ('os-', '1.0', quota_sets.QuotaSetsControllerLegacy, 'defaults'),
+        ('os-', '2.6', quota_sets.QuotaSetsControllerLegacy, 'defaults'),
+        ('', '2.7', quota_sets.QuotaSetsController, 'defaults'),
+        ('os-', '1.0', quota_sets.QuotaSetsControllerLegacy, 'show'),
+        ('os-', '2.6', quota_sets.QuotaSetsControllerLegacy, 'show'),
+        ('', '2.7', quota_sets.QuotaSetsController, 'show'),
+    )
+    @ddt.unpack
+    def test_get_quotas_with_different_api_versions(self, url, version,
+                                                    controller, method_name):
+        expected = {
+            'quota_set': {
+                'id': self.project_id,
+                'shares': 50,
+                'gigabytes': 1000,
+                'snapshots': 50,
+                'snapshot_gigabytes': 1000,
+                'share_networks': 10,
+            }
+        }
+        req = fakes.HTTPRequest.blank(
+            '/fooproject/%squota-sets' % url,
+            version=version, use_admin_context=True)
+
+        result = getattr(controller(), method_name)(req, self.project_id)
 
         self.assertEqual(expected, result)
 
@@ -191,7 +221,15 @@ class QuotaSetsControllerTest(test.TestCase):
             self.controller.update,
             REQ_MEMBER, self.project_id, body=body)
 
-    def test_update_all_quotas_with_force(self):
+    @ddt.data(
+        ('os-quota-sets', '1.0', quota_sets.QuotaSetsControllerLegacy),
+        ('os-quota-sets', '2.6', quota_sets.QuotaSetsControllerLegacy),
+        ('quota-sets', '2.7', quota_sets.QuotaSetsController),
+    )
+    @ddt.unpack
+    def test_update_all_quotas_with_force(self, url, version, controller):
+        req = fakes.HTTPRequest.blank(
+            '/fooproject/%s' % url, version=version, use_admin_context=True)
         quotas = (
             ('quota_shares', 13),
             ('quota_gigabytes', 14),
@@ -213,8 +251,8 @@ class QuotaSetsControllerTest(test.TestCase):
             }
         }
 
-        update_result = self.controller.update(
-            REQ, self.project_id, body=expected)
+        update_result = controller().update(
+            req, self.project_id, body=expected)
 
         expected['quota_set'].pop('force')
         expected['quota_set'].pop('tenant_id')
@@ -225,11 +263,19 @@ class QuotaSetsControllerTest(test.TestCase):
         expected['quota_set']['id'] = self.project_id
         self.assertEqual(expected, show_result)
 
-    def test_delete_tenant_quota(self):
+    @ddt.data(
+        ('os-quota-sets', '1.0', quota_sets.QuotaSetsControllerLegacy),
+        ('os-quota-sets', '2.6', quota_sets.QuotaSetsControllerLegacy),
+        ('quota-sets', '2.7', quota_sets.QuotaSetsController),
+    )
+    @ddt.unpack
+    def test_delete_tenant_quota(self, url, version, controller):
         self.mock_object(quota_sets.QUOTAS, 'destroy_all_by_project_and_user')
         self.mock_object(quota_sets.QUOTAS, 'destroy_all_by_project')
+        req = fakes.HTTPRequest.blank(
+            '/fooproject/%s' % url, version=version, use_admin_context=True)
 
-        result = self.controller.delete(REQ, self.project_id)
+        result = controller().delete(req, self.project_id)
 
         self.assertTrue(
             utils.IsAMatcher(webob.response.Response) == result
@@ -239,7 +285,7 @@ class QuotaSetsControllerTest(test.TestCase):
         self.assertFalse(
             quota_sets.QUOTAS.destroy_all_by_project_and_user.called)
         quota_sets.QUOTAS.destroy_all_by_project.assert_called_once_with(
-            REQ.environ['manila.context'], self.project_id)
+            req.environ['manila.context'], self.project_id)
 
     def test_delete_user_quota(self):
         project_id = 'foo_project_id'
@@ -265,3 +311,30 @@ class QuotaSetsControllerTest(test.TestCase):
             webob.exc.HTTPForbidden,
             self.controller.delete,
             REQ_MEMBER, self.project_id)
+
+    @ddt.data(
+        ('os-quota-sets', '2.7', quota_sets.QuotaSetsControllerLegacy),
+        ('quota-sets', '2.6', quota_sets.QuotaSetsController),
+        ('quota-sets', '2.0', quota_sets.QuotaSetsController),
+    )
+    @ddt.unpack
+    def test_api_not_found(self, url, version, controller):
+        req = fakes.HTTPRequest.blank('/fooproject/%s' % url, version=version)
+        for method_name in ('show', 'defaults', 'delete'):
+            self.assertRaises(
+                exception.VersionNotFoundForAPIMethod,
+                getattr(controller(), method_name),
+                req, self.project_id)
+
+    @ddt.data(
+        ('os-quota-sets', '2.7', quota_sets.QuotaSetsControllerLegacy),
+        ('quota-sets', '2.6', quota_sets.QuotaSetsController),
+        ('quota-sets', '2.0', quota_sets.QuotaSetsController),
+    )
+    @ddt.unpack
+    def test_update_api_not_found(self, url, version, controller):
+        req = fakes.HTTPRequest.blank('/fooproject/%s' % url, version=version)
+        self.assertRaises(
+            exception.VersionNotFoundForAPIMethod,
+            controller().update,
+            req, self.project_id)

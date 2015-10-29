@@ -61,3 +61,18 @@ user documentation.
 ---
   Return share_type UUID instead of name in Share API and add share_type_name
   field.
+
+2.7
+---
+  Rename old extension-like API URLs to core-API-like.
+  +----------------------+---------------------+
+  |     Old (1.0-2.6)    |      New (2.7+)     |
+  +----------------------+---------------------+
+  | os-availability-zone |  availability-zones |
+  +----------------------+---------------------+
+  |      os-services     |       services      |
+  +----------------------+---------------------+
+  |     os-quota-sets    |      quota-sets     |
+  +----------------------+---------------------+
+  |  os-quota-class-sets |   quota-class-sets  |
+  +----------------------+---------------------+

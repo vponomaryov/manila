@@ -26,19 +26,10 @@ from manila import share
 LOG = log.getLogger(__name__)
 
 
-class ShareUnmanageController(wsgi.Controller):
-    """The Unmanage API controller for the OpenStack API."""
+class ShareUnmanageMixin(object):
 
-    resource_name = "share"
-
-    def __init__(self, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.share_api = share.API()
-
-    @wsgi.action("unmanage")
-    def unmanage(self, req, id):
+    def _unmanage(self, req, id, body=None):
         """Unmanage a share."""
-        # TODO(vponomaryov): move it to shares controller as 'unmanage' action.
         context = req.environ['manila.context']
         self.authorize(req.environ['manila.context'], 'unmanage')
 
@@ -70,6 +61,20 @@ class ShareUnmanageController(wsgi.Controller):
             raise exc.HTTPForbidden(explanation=six.text_type(e))
 
         return webob.Response(status_int=202)
+
+
+class ShareUnmanageController(ShareUnmanageMixin, wsgi.Controller):
+    """The Unmanage API controller for the OpenStack API."""
+
+    resource_name = "share"
+
+    def __init__(self, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.share_api = share.API()
+
+    @wsgi.Controller.api_version('1.0', '2.6')
+    def unmanage(self, req, id):
+        return self._unmanage(req, id)
 
 
 def create_resource():
