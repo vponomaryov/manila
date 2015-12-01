@@ -40,7 +40,7 @@ class SharesNFSTest(base.BaseSharesTest):
 
         share = self.create_share(self.protocol)
         detailed_elements = {'name', 'id', 'availability_zone',
-                             'description', 'export_location', 'project_id',
+                             'description', 'project_id',
                              'host', 'created_at', 'share_proto', 'metadata',
                              'size', 'snapshot_id', 'share_network_id',
                              'status', 'share_type', 'volume_type', 'links',
@@ -56,6 +56,7 @@ class SharesNFSTest(base.BaseSharesTest):
         self.assertFalse(share['is_public'])
 
         # Get share using v 2.1 - we expect key 'snapshot_support' to be absent
+        detailed_elements.add('export_location')
         share_get = self.shares_v2_client.get_share(share['id'], version='2.1')
         self.assertTrue(detailed_elements.issubset(share_get.keys()), msg)
 
@@ -63,6 +64,14 @@ class SharesNFSTest(base.BaseSharesTest):
         share_get = self.shares_v2_client.get_share(share['id'], version='2.2')
         detailed_elements.add('snapshot_support')
         self.assertTrue(detailed_elements.issubset(share_get.keys()), msg)
+
+        if float(CONF.share.max_api_microversion) > 2.8:
+            # Get share using v 2.9 - key 'export_location' is expected
+            # to be absent
+            share_get = self.shares_v2_client.get_share(
+                share['id'], version='2.9')
+            detailed_elements.remove('export_location')
+            self.assertTrue(detailed_elements.issubset(share_get.keys()), msg)
 
         # Delete share
         self.shares_v2_client.delete_share(share['id'])
