@@ -829,7 +829,12 @@ class GenericShareDriver(driver.ExecuteMixin, driver.ShareDriver):
         # NOTE(vponomaryov): Generic driver does not need allocations, because
         # Nova will handle it. It is valid for all multitenant drivers, that
         # use service instance provided by Nova.
-        return 0
+        # return 0
+        return 1
+
+    def get_admin_network_allocations_number(self):
+        # TODO(vponomaryov): delete this method after testing.
+        return 1
 
     def _setup_server(self, network_info, metadata=None):
         msg = "Creating share server '%s'."

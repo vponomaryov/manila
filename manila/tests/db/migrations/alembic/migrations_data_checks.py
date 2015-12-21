@@ -253,3 +253,71 @@ class ShareInstanceExportLocationMetadataChecks(BaseMigrationChecks):
         self.test_case.assertRaises(
             sa_exc.NoSuchTableError,
             utils.load_table, self.elm_table_name, engine)
+
+
+@map_to_migration('5155c7077f99')
+class NetworkAllocationsNewLabelColumnChecks(BaseMigrationChecks):
+    table_name = 'network_allocations'
+
+    def setup_upgrade_data(self, engine):
+        user_id = 'user_id'
+        project_id = 'project_id'
+        share_server_id = 'foo_share_server_id'
+
+        # Create share network
+        share_network_data = {
+            'id': 'foo_share_network_id',
+            'user_id': user_id,
+            'project_id': project_id,
+        }
+        sn_table = utils.load_table('share_networks', engine)
+        engine.execute(sn_table.insert(share_network_data))
+
+        # Create share server
+        share_server_data = {
+            'id': share_server_id,
+            'share_network_id': share_network_data['id'],
+            'host': 'fake_host',
+            'status': 'active',
+        }
+        ss_table = utils.load_table('share_servers', engine)
+        engine.execute(ss_table.insert(share_server_data))
+
+        # Create network allocations
+        network_allocations = [
+            {'id': 'fake_network_allocation_id_1',
+             'share_server_id': share_server_id,
+             'ip_address': '1.1.1.1'},
+            {'id': 'fake_network_allocation_id_2',
+             'share_server_id': share_server_id,
+             'ip_address': '2.2.2.2'},
+        ]
+        na_table = utils.load_table(self.table_name, engine)
+        for network_allocation in network_allocations:
+            engine.execute(na_table.insert(network_allocation))
+
+    def check_upgrade(self, engine, data):
+        na_table = utils.load_table(self.table_name, engine)
+        for na in engine.execute(na_table.select()):
+            self.test_case.assertTrue(hasattr(na, 'label'))
+            self.test_case.assertEqual(na.label, 'user')
+
+        # Create admin network allocation
+        network_allocations = [
+            {'id': 'fake_network_allocation_id_3',
+             'share_server_id': na.share_server_id,
+             'ip_address': '3.3.3.3',
+             'label': 'admin'},
+        ]
+        engine.execute(na_table.insert(network_allocations))
+
+        # Select admin network allocations
+        for na in engine.execute(
+                na_table.select().where(na_table.c.label == 'admin')):
+            self.test_case.assertTrue(hasattr(na, 'label'))
+            self.test_case.assertEqual('admin', na.label)
+
+    def check_downgrade(self, engine):
+        na_table = utils.load_table(self.table_name, engine)
+        for na in engine.execute(na_table.select()):
+            self.test_case.assertFalse(hasattr(na, 'label'))

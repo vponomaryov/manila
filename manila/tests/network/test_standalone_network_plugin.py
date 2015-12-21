@@ -360,7 +360,8 @@ class StandaloneNetworkPluginTest(test.TestCase):
         instance.db.network_allocation_create.assert_called_once_with(
             fake_context,
             dict(share_server_id=fake_share_server['id'],
-                 ip_address='10.0.0.2', status=constants.STATUS_ACTIVE))
+                 ip_address='10.0.0.2', status=constants.STATUS_ACTIVE,
+                 label='user'))
 
     def test_allocate_network_two_ip_addresses_ipv4_two_usages_exist(self):
         ctxt = type('FakeCtxt', (object,), {'fake': ['10.0.0.2', '10.0.0.4']})
@@ -401,11 +402,13 @@ class StandaloneNetworkPluginTest(test.TestCase):
             mock.call(
                 ctxt,
                 dict(share_server_id=fake_share_server['id'],
-                     ip_address='10.0.0.3', status=constants.STATUS_ACTIVE)),
+                     ip_address='10.0.0.3', status=constants.STATUS_ACTIVE,
+                     label='user')),
             mock.call(
                 ctxt,
                 dict(share_server_id=fake_share_server['id'],
-                     ip_address='10.0.0.5', status=constants.STATUS_ACTIVE)),
+                     ip_address='10.0.0.5', status=constants.STATUS_ACTIVE,
+                     label='user')),
         ])
 
     def test_allocate_network_no_available_ipv4_addresses(self):

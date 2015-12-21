@@ -52,6 +52,11 @@ class NeutronNetworkPlugin(network.NetworkBaseAPI):
         self._neutron_api = None
         self._neutron_api_args = args
         self._neutron_api_kwargs = kwargs
+        self._label = kwargs.pop('label', 'user')
+
+    @property
+    def label(self):
+        return self._label
 
     @property
     @utils.synchronized("instantiate_neutron_api")
@@ -61,7 +66,8 @@ class NeutronNetworkPlugin(network.NetworkBaseAPI):
                                                 **self._neutron_api_kwargs)
         return self._neutron_api
 
-    def allocate_network(self, context, share_server, share_network, **kwargs):
+    def allocate_network(self, context, share_server, share_network=None,
+                         **kwargs):
         """Allocate network resources using given network information.
 
         Create neutron ports for a given neutron network and subnet,
@@ -79,8 +85,10 @@ class NeutronNetworkPlugin(network.NetworkBaseAPI):
             msg = "%s extension required" % neutron_constants.PROVIDER_NW_EXT
             raise exception.NetworkBadConfigurationException(reason=msg)
 
-        self._save_neutron_network_data(context, share_network)
-        self._save_neutron_subnet_data(context, share_network)
+        if self.label != 'admin':
+            self._verify_share_network(share_server['id'], share_network)
+            self._save_neutron_network_data(context, share_network)
+            self._save_neutron_subnet_data(context, share_network)
 
         allocation_count = kwargs.get('count', 1)
         device_owner = kwargs.get('device_owner', 'share')
@@ -120,6 +128,7 @@ class NeutronNetworkPlugin(network.NetworkBaseAPI):
             'ip_address': port['fixed_ips'][0]['ip_address'],
             'mac_address': port['mac_address'],
             'status': constants.STATUS_ACTIVE,
+            'label': self.label,
         }
         return self.db.network_allocation_create(context, port_dict)
 
@@ -175,9 +184,17 @@ class NeutronSingleNetworkPlugin(NeutronNetworkPlugin):
         self.subnet = self.neutron_api.configuration.neutron_subnet_id
         self._verify_net_and_subnet()
 
-    def allocate_network(self, context, share_server, share_network, **kwargs):
-        share_network = self._update_share_network_net_data(
-            context, share_network)
+    def allocate_network(self, context, share_server, share_network=None,
+                         **kwargs):
+        if self.label != 'admin':
+            share_network = self._update_share_network_net_data(
+                context, share_network)
+        else:
+            share_network = {
+                'project_id': self.neutron_api.admin_project_id,
+                'neutron_net_id': self.net,
+                'neutron_subnet_id': self.subnet,
+            }
         super(NeutronSingleNetworkPlugin, self).allocate_network(
             context, share_server, share_network, **kwargs)
 

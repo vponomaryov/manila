@@ -777,6 +777,7 @@ class NetworkAllocation(BASE, ManilaBase):
     mac_address = Column(String(32), nullable=True)
     share_server_id = Column(String(36), ForeignKey('share_servers.id'),
                              nullable=False)
+    label = Column(String(255), nullable=True)
 
 
 class DriverPrivateData(BASE, ManilaBase):

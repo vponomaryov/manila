@@ -73,6 +73,7 @@ fake_network_allocation = {
     'ip_address': fake_neutron_port['fixed_ips'][0]['ip_address'],
     'mac_address': fake_neutron_port['mac_address'],
     'status': constants.STATUS_ACTIVE,
+    'label': 'user',
 }
 
 

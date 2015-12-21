@@ -1187,7 +1187,10 @@ class ShareManager(manager.SchedulerDependentManager):
         # Network info is used by driver for setting up share server
         # and getting server info on share creation.
         network_allocations = self.db.network_allocations_get_for_share_server(
-            context, share_server['id'])
+            context, share_server['id'], label='user')
+        admin_network_allocations = (
+            self.db.network_allocations_get_for_share_server(
+                context, share_server['id'], label='admin'))
         network_info = {
             'server_id': share_server['id'],
             'segmentation_id': share_network['segmentation_id'],
@@ -1197,6 +1200,7 @@ class ShareManager(manager.SchedulerDependentManager):
             'nova_net_id': share_network['nova_net_id'],
             'security_services': share_network['security_services'],
             'network_allocations': network_allocations,
+            'admin_network_allocations': admin_network_allocations,
             'backend_details': share_server.get('backend_details'),
             'network_type': share_network['network_type'],
         }
@@ -1207,6 +1211,7 @@ class ShareManager(manager.SchedulerDependentManager):
             share_network = self.db.share_network_get(
                 context, share_server['share_network_id'])
             self.driver.allocate_network(context, share_server, share_network)
+            self.driver.allocate_admin_network(context, share_server)
 
             # Get share_network again in case it was updated.
             share_network = self.db.share_network_get(
