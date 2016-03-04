@@ -457,6 +457,10 @@ class ShareSnapshotNotFound(NotFound):
     message = _("Snapshot %(snapshot_id)s could not be found.")
 
 
+class ShareSnapshotInstanceNotFound(NotFound):
+    message = _("Snapshot Instance %(instance_id)s could not be found.")
+
+
 class ShareSnapshotNotSupported(ManilaException):
     message = _("Share %(share_name)s does not support snapshots.")
 
