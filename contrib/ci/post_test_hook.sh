@@ -184,6 +184,26 @@ elif [[ "$DRIVER" == "zfsonlinux" ]]; then
     iniset $TEMPEST_CONFIG share multitenancy_enabled False
     iniset $TEMPEST_CONFIG share multi_backend True
     iniset $TEMPEST_CONFIG share backend_replication_type 'readable'
+elif [[ "$DRIVER" == "dummy" ]]; then
+    MANILA_TEMPEST_CONCURRENCY=8
+    RUN_MANILA_CG_TESTS=True
+    RUN_MANILA_MANAGE_TESTS=False
+    iniset $TEMPEST_CONFIG share run_migration_tests True
+    iniset $TEMPEST_CONFIG share run_quota_tests True
+    iniset $TEMPEST_CONFIG share run_replication_tests True
+    iniset $TEMPEST_CONFIG share run_shrink_tests True
+    iniset $TEMPEST_CONFIG share enable_ip_rules_for_protocols 'nfs'
+    iniset $TEMPEST_CONFIG share enable_user_rules_for_protocols 'cifs'
+    iniset $TEMPEST_CONFIG share enable_cert_rules_for_protocols ''
+    iniset $TEMPEST_CONFIG share enable_ro_access_level_for_protocols 'nfs,cifs'
+    iniset $TEMPEST_CONFIG share build_timeout 30
+    iniset $TEMPEST_CONFIG share share_creation_retry_number 0
+    iniset $TEMPEST_CONFIG share capability_storage_protocol 'NFS_CIFS'
+    iniset $TEMPEST_CONFIG share enable_protocols 'nfs,cifs'
+    iniset $TEMPEST_CONFIG share suppress_errors_in_cleanup False
+    iniset $TEMPEST_CONFIG share multitenancy_enabled True
+    iniset $TEMPEST_CONFIG share multi_backend True
+    iniset $TEMPEST_CONFIG share backend_replication_type 'readable'
 fi
 
 # Enable consistency group tests
