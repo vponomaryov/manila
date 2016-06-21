@@ -101,7 +101,7 @@ class ShareRpcAPITestCase(test.TestCase):
             expected_msg['snapshot_id'] = snapshot['id']
         if 'dest_host' in expected_msg:
             del expected_msg['dest_host']
-            expected_msg['host'] = self.fake_host
+            expected_msg['dest_host'] = self.fake_host
         if 'share_replica' in expected_msg:
             share_replica = expected_msg.pop('share_replica', None)
             expected_msg['share_replica_id'] = share_replica['id']
@@ -123,8 +123,10 @@ class ShareRpcAPITestCase(test.TestCase):
             host = kwargs['share_replica']['host']
         elif 'replicated_snapshot' in kwargs:
             host = kwargs['share']['instance']['host']
-        else:
+        elif 'share' in kwargs:
             host = kwargs['share']['host']
+        else:
+            host = self.fake_host['host']
         target['server'] = host
         target['topic'] = '%s.%s' % (CONF.share_topic, host)
 
@@ -256,14 +258,16 @@ class ShareRpcAPITestCase(test.TestCase):
                              force_host_copy=True,
                              notify=True)
 
+    def test_migration_driver_recovery(self):
+        fake_dest_host = "host@backend"
+        self._test_share_api('migration_driver_recovery',
+                             rpc_method='cast',
+                             version='1.12',
+                             share=self.fake_share,
+                             host=fake_dest_host)
+
     def test_migration_get_info(self):
         self._test_share_api('migration_get_info',
-                             rpc_method='call',
-                             version='1.6',
-                             share_instance=self.fake_share)
-
-    def test_migration_get_driver_info(self):
-        self._test_share_api('migration_get_driver_info',
                              rpc_method='call',
                              version='1.6',
                              share_instance=self.fake_share)
@@ -271,22 +275,23 @@ class ShareRpcAPITestCase(test.TestCase):
     def test_migration_complete(self):
         self._test_share_api('migration_complete',
                              rpc_method='cast',
-                             version='1.10',
-                             share=self.fake_share,
-                             share_instance_id='fake_ins_id',
+                             version='1.12',
+                             share_instance=self.fake_share['instance'],
                              new_share_instance_id='new_fake_ins_id')
 
     def test_migration_cancel(self):
         self._test_share_api('migration_cancel',
                              rpc_method='call',
-                             version='1.10',
-                             share=self.fake_share)
+                             version='1.12',
+                             share_instance=self.fake_share['instance'],
+                             migrating_instance_id='ins2_id')
 
     def test_migration_get_progress(self):
         self._test_share_api('migration_get_progress',
                              rpc_method='call',
-                             version='1.10',
-                             share=self.fake_share)
+                             version='1.12',
+                             share_instance=self.fake_share['instance'],
+                             migrating_instance_id='ins2_id')
 
     def test_delete_share_replica(self):
         self._test_share_api('delete_share_replica',
@@ -337,6 +342,21 @@ class ShareRpcAPITestCase(test.TestCase):
                              share_id=self.fake_snapshot['share_id'],
                              force=False,
                              host='fake_host')
+
+    def test_provide_share_server(self):
+        self._test_share_api('provide_share_server',
+                             rpc_method='call',
+                             version='1.12',
+                             share_instance=self.fake_share['instance'],
+                             share_network_id='fake_network_id',
+                             snapshot_id='fake_snapshot_id')
+
+    def test_create_share_server(self):
+        self._test_share_api('create_share_server',
+                             rpc_method='cast',
+                             version='1.12',
+                             share_instance=self.fake_share['instance'],
+                             share_server_id='fake_server_id')
 
     class Desthost(object):
         host = 'fake_host'
