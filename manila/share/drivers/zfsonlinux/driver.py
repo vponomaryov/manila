@@ -109,6 +109,11 @@ zfsonlinux_opts = [
         required=True,
         default="tmp_snapshot_for_replication_",
         help="Set snapshot prefix for usage in ZFS replication. Required."),
+    cfg.StrOpt(
+        "zfs_migration_snapshot_prefix",
+        required=True,
+        default="tmp_snapshot_for_share_migration_",
+        help="Set snapshot prefix for usage in ZFS migration. Required."),
 ]
 
 CONF = cfg.CONF
@@ -138,6 +143,8 @@ class ZFSonLinuxShareDriver(zfs_utils.ExecuteMixin, driver.ShareDriver):
             [False], *args, config_opts=[zfsonlinux_opts], **kwargs)
         self.replica_snapshot_prefix = (
             self.configuration.zfs_replica_snapshot_prefix)
+        self.migration_snapshot_prefix = (
+            self.configuration.zfs_migration_snapshot_prefix)
         self.backend_name = self.configuration.safe_get(
             'share_backend_name') or 'ZFSonLinux'
         self.zpool_list = self._get_zpool_list()
@@ -432,7 +439,7 @@ class ZFSonLinuxShareDriver(zfs_utils.ExecuteMixin, driver.ShareDriver):
             share['id'], {
                 'entity_type': 'share',
                 'dataset_name': dataset_name,
-                'ssh_cmd': ssh_cmd,  # used in replication
+                'ssh_cmd': ssh_cmd,  # used with replication and migration
                 'pool_name': pool_name,  # used in replication
                 'used_options': ' '.join(options),
             }
@@ -463,7 +470,7 @@ class ZFSonLinuxShareDriver(zfs_utils.ExecuteMixin, driver.ShareDriver):
             out, err = self.zfs('list', '-r', '-t', 'snapshot', pool_name)
             snapshots = self.parse_zfs_answer(out)
             full_snapshot_prefix = (
-                dataset_name + '@' + self.replica_snapshot_prefix)
+                dataset_name + '@')
             for snap in snapshots:
                 if full_snapshot_prefix in snap['NAME']:
                     self._delete_dataset_or_snapshot_with_retry(snap['NAME'])
@@ -792,6 +799,22 @@ class ZFSonLinuxShareDriver(zfs_utils.ExecuteMixin, driver.ShareDriver):
                 return replica
         msg = _("Active replica not found.")
         raise exception.ReplicationException(reason=msg)
+
+    def _get_migration_snapshot_prefix(self, share_instance):
+        """Returns migration-based snapshot prefix."""
+        migration_snapshot_prefix = "%s_%s" % (
+            self.migration_snapshot_prefix,
+            share_instance['id'].replace('-', '_'))
+        return migration_snapshot_prefix
+
+    def _get_migration_snapshot_tag(self, share_instance):
+        """Returns migration- and time-based snapshot tag."""
+        current_time = timeutils.utcnow().isoformat()
+        snapshot_tag = "%s_time_%s" % (
+            self._get_migration_snapshot_prefix(share_instance), current_time)
+        snapshot_tag = (
+            snapshot_tag.replace('-', '_').replace('.', '_').replace(':', '_'))
+        return snapshot_tag
 
     @ensure_share_server_not_provided
     def create_replica(self, context, replica_list, new_replica,
@@ -1279,3 +1302,192 @@ class ZFSonLinuxShareDriver(zfs_utils.ExecuteMixin, driver.ShareDriver):
             return_dict.update({'status': constants.STATUS_ERROR})
 
         return return_dict
+
+    @ensure_share_server_not_provided
+    def migration_check_compatibility(
+            self, context, share_ref, dest_host, dest_driver_migration_info,
+            share_server=None):
+        """Is called to test compatibility with destination backend."""
+        return self.configuration.share_driver == (
+            dest_driver_migration_info.get("share_driver"))
+
+    @ensure_share_server_not_provided
+    def migration_get_driver_info(self, context, share, dest_host,
+                                  share_server=None):
+        """Is called to provide necessary driver migration logic."""
+        return {
+            "share_driver": self.configuration.share_driver,
+            "executor": zfs_utils.get_remote_shell_executor(
+                ip=self.configuration.zfs_service_ip,
+                port=22,
+                conn_timeout=self.configuration.ssh_conn_timeout,
+                login=self.configuration.zfs_ssh_username,
+                password=self.configuration.zfs_ssh_user_password,
+                privatekey=self.configuration.zfs_ssh_private_key_path,
+                max_size=10,
+            ),
+        }
+
+    @ensure_share_server_not_provided
+    def migration_start(
+            self, context, src_share_instance, dest_host,
+            dest_driver_migration_info, dest_share_instance, access_rules,
+            share_server=None, dest_share_server=None):
+        """Is called to perform 1st phase of driver migration of a given share.
+
+        """
+        src_dataset_name = self.private_storage.get(
+            src_share_instance['id'], 'dataset_name')
+        dst_dataset_name = self._get_dataset_name(dest_share_instance)
+        ssh_cmd = '%(username)s@%(host)s' % {
+            'username': self.configuration.zfs_ssh_username,
+            'host': self.service_ip,
+        }
+        snapshot_tag = self._get_migration_snapshot_tag(dest_share_instance)
+        src_snapshot_name = (
+            '%(dataset_name)s@%(snapshot_tag)s' % {
+                'snapshot_tag': snapshot_tag,
+                'dataset_name': src_dataset_name,
+            }
+        )
+
+        # Save valuable data to DB
+        self.private_storage.update(src_share_instance['id'], {
+            'migr_snapshot_tag': snapshot_tag,
+        })
+        self.private_storage.update(dest_share_instance['id'], {
+            'entity_type': 'share',
+            'dataset_name': dst_dataset_name,
+            'ssh_cmd': ssh_cmd,
+            'pool_name': share_utils.extract_host(
+                dest_share_instance['host'], level='pool'),
+            'migr_snapshot_tag': snapshot_tag,
+        })
+
+        # Create temporary snapshot on src host.
+        self.execute('sudo', 'zfs', 'snapshot', src_snapshot_name)
+
+        # Send/receive temporary snapshot
+        cmd = (
+            'nohup '
+            'sudo zfs send -vDR ' + src_snapshot_name + ' '
+            '| ssh ' + ssh_cmd + ' '
+            'sudo zfs receive -v ' + dst_dataset_name + ' '
+            '& exit 0'
+        )
+        self.execute(cmd, shell=True)
+
+    @ensure_share_server_not_provided
+    def migration_continue(
+            self, context, src_share_instance, dest_host,
+            dest_driver_migration_info, dest_share_instance, access_rules,
+            share_server=None, dest_share_server=None):
+        """Is called in source share's backend to continue migration."""
+
+        snapshot_tag = self.private_storage.get(
+            dest_share_instance['id'], 'migr_snapshot_tag')
+
+        out, err = self.execute('ps', 'aux')
+        if not '@%s' % snapshot_tag in out:
+            dst_dataset_name = self.private_storage.get(
+                dest_share_instance['id'], 'dataset_name')
+            try:
+                dst_executor = dest_driver_migration_info['executor']
+                self.execute(
+                    'sudo', 'zfs', 'get', 'quota', dst_dataset_name,
+                    executor=dst_executor,
+                )
+
+                # Apply access rules to new share instance
+                self._get_share_helper(
+                    src_share_instance['share_proto']).update_access(
+                        dst_dataset_name, access_rules, add_rules=[],
+                        delete_rules=[], make_all_ro=False,
+                        executor=dst_executor)
+
+                return True
+            except exception.ProcessExecutionError as e:
+                raise exception.ZFSonLinuxException(msg=_(
+                    'Migration process is absent and dst dataset '
+                    'returned following error: %s') % e)
+
+    @ensure_share_server_not_provided
+    def migration_complete(
+            self, context, src_share_instance, dest_host,
+            dest_driver_migration_info, dest_share_instance, access_rules,
+            share_server=None, dest_share_server=None):
+        """Is called to perform 2nd phase of driver migration of a given share.
+
+        """
+        dst_dataset_name = self.private_storage.get(
+            dest_share_instance['id'], 'dataset_name')
+        snapshot_tag = self.private_storage.get(
+            dest_share_instance['id'], 'migr_snapshot_tag')
+        dst_snapshot_name = (
+            '%(dataset_name)s@%(snapshot_tag)s' % {
+                'snapshot_tag': snapshot_tag,
+                'dataset_name': dst_dataset_name,
+            }
+        )
+
+        dst_executor = dest_driver_migration_info['executor']
+
+        # Destroy temporary migration snapshot on dst host
+        self.execute(
+            'sudo', 'zfs', 'destroy', dst_snapshot_name,
+            executor=dst_executor,
+        )
+
+        # Get export locations of new share instance
+        export_locations = self._get_share_helper(
+            dest_share_instance['share_proto']).create_exports(
+                dst_dataset_name,
+                executor=dst_executor)
+
+        # Destroy src share and temporary migration snapshot on src (this) host
+        self.delete_share(context, src_share_instance)
+
+        return export_locations
+
+    @ensure_share_server_not_provided
+    def migration_cancel(
+            self, context, src_share_instance, dest_host,
+            dest_driver_migration_info, dest_share_instance,
+            share_server=None, dest_share_server=None):
+        """Is called to cancel driver migration."""
+
+        src_dataset_name = self.private_storage.get(
+            src_share_instance['id'], 'dataset_name')
+        dst_dataset_name = self.private_storage.get(
+            dest_share_instance['id'], 'dataset_name')
+        ssh_cmd = self.private_storage.get(
+            dest_share_instance['id'], 'ssh_cmd')
+        snapshot_tag = self.private_storage.get(
+            dest_share_instance['id'], 'migr_snapshot_tag')
+
+        # Kill migration process
+        try:
+            migr_pid = self.private_storage.get(
+                src_share_instance['id'], 'migr_pid')
+            self.execute('sudo', 'kill', '-9', migr_pid)
+        except exception.ProcessExecutionError as e:
+            # Ignore screen session NotFound error
+            LOG.debug("Caught following error trying to kill screen session "
+                      "for cancelled migration: %s", e)
+
+        # Sleep couple of seconds before destroying updated objects
+        time.sleep(2)
+
+        # Destroy snapshot on source host
+        self._delete_dataset_or_snapshot_with_retry(
+            src_dataset_name + '@' + snapshot_tag)
+
+        # Destroy dataset and its migration snapshot on destination host
+        self.execute(
+            'ssh', ssh_cmd,
+            'sudo', 'zfs', 'destroy', '-r', dst_dataset_name,
+        )
+
+        LOG.debug(
+            "Migration of share with ID '%s' has been canceled." %
+            src_share_instance["id"])
