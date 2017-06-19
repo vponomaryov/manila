@@ -183,7 +183,12 @@ class Share(BASE, ManilaBase):
     __tablename__ = 'shares'
     _extra_keys = ['name', 'export_location', 'export_locations', 'status',
                    'host', 'share_server_id', 'share_network_id',
-                   'availability_zone', 'access_rules_status', 'share_type_id']
+                   'availability_zone', 'access_rules_status', 'share_type_id',
+                   'domain_id']
+
+    @property
+    def domain_id(self):
+        return 'default'
 
     @property
     def name(self):

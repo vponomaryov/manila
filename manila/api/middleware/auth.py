@@ -75,6 +75,10 @@ class ManilaKeystoneContext(base_wsgi.Middleware):
     def __call__(self, req):
         user_id = req.headers.get('X_USER')
         user_id = req.headers.get('X_USER_ID', user_id)
+
+        domain_id = req.headers.get('X-Domain-Id')
+        domain_id = req.headers.get('X-Project-Domain-Id', domain_id)
+
         if user_id is None:
             LOG.debug("Neither X_USER_ID nor X_USER found in request")
             return webob.exc.HTTPUnauthorized()
@@ -107,6 +111,7 @@ class ManilaKeystoneContext(base_wsgi.Middleware):
 
         ctx = context.RequestContext(user_id,
                                      project_id,
+                                     domain_id=domain_id,
                                      roles=roles,
                                      auth_token=auth_token,
                                      remote_address=remote_address,

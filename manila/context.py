@@ -57,7 +57,7 @@ class RequestContext(context.RequestContext):
             auth_token=auth_token,
             user=user_id or user,
             tenant=project_id or tenant,
-            domain=kwargs.pop('domain', None),
+            domain=kwargs.pop('domain', kwargs.pop('domain_id', None)),
             user_domain=kwargs.pop('user_domain', None),
             project_domain=kwargs.pop('project_domain', None),
             is_admin=is_admin,
@@ -110,6 +110,8 @@ class RequestContext(context.RequestContext):
         values.update({
             'user_id': getattr(self, 'user_id', None),
             'project_id': getattr(self, 'project_id', None),
+            'domain_id': getattr(self, 'domain_id',
+                                 getattr(self, 'domain', None)),
             'read_deleted': getattr(self, 'read_deleted', None),
             'remote_address': getattr(self, 'remote_address', None),
             'timestamp': self.timestamp.isoformat() if hasattr(
